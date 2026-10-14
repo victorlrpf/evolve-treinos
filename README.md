@@ -1,0 +1,51 @@
+# Evolve Treinos
+
+App em React Native (Expo + TypeScript) para criar treinos e acompanhar a evolução com relatórios e dashboard. Funciona 100% offline: tudo é salvo no próprio aparelho (AsyncStorage), sem servidor.
+
+## Como rodar
+
+```bash
+npm install
+npx expo start
+```
+
+Abra no celular com o app **Expo Go** (QR code) ou pressione `a` (Android) / `i` (iOS) para usar um emulador.
+
+## Telas
+
+| Tela | Rota | O que faz |
+| --- | --- | --- |
+| Cadastro / boas-vindas | `/welcome` | Nome opcional para o app te chamar pelo nome. Dá para pular. |
+| Dashboard | `/` | Treinos e volume dos últimos 7 dias, sequência de dias, gráficos e histórico. |
+| Meus treinos | `/workouts` | Lista de treinos, com destaque para o treino do dia da semana. |
+| Inclusão de treino | `/workout/form` | Nome, dia da semana, observações e exercícios (séries, reps, carga). |
+| Edição de treino | `/workout/form?id=...` | Mesma tela, preenchida; também permite excluir. |
+| Visualização de treino | `/workout/[id]` | Detalhes, modo "Iniciar treino" (marcar exercícios) e evolução do treino. |
+| Perfil | `/profile` | Alterar nome, tema (claro / noturno / automático), trocar usuário e apagar dados. |
+
+## Como a evolução é calculada
+
+Ao tocar em **Iniciar treino** e depois **Finalizar treino**, o app registra uma sessão com os exercícios marcados. O **volume** é a soma de `séries × repetições × carga (kg)`. O dashboard usa essas sessões para montar os gráficos (treinos por dia, volume por semana) e a sequência de dias.
+
+## Estrutura
+
+```
+src/
+  app/          rotas (Expo Router): _layout, welcome, (tabs), workout
+  screens/      conteúdo de cada tela
+  components/   Card, Button, Input, Chip, BarChart...
+  store/        estado global + persistência local
+  theme/        paleta roxa (clara e escura) e hook useTheme
+  utils/        datas, volume, estatísticas do dashboard
+```
+
+## Tema
+
+A cor principal é roxa (`src/theme/colors.ts`). O modo noturno é escolhido no Perfil (Claro, Noturno ou Automático, que segue o sistema).
+
+## Ideias para evoluir
+
+- Exportar / importar backup dos dados em JSON
+- Cronômetro de descanso entre séries
+- Gráfico de carga por exercício ao longo do tempo
+- Notificações lembrando o treino do dia
