@@ -18,10 +18,12 @@ Abra no celular com o app **Expo Go** (QR code) ou pressione `a` (Android) / `i`
 | Cadastro / boas-vindas | `/welcome` | Nome opcional para o app te chamar pelo nome. Dá para pular. |
 | Dashboard | `/` | Treinos e volume dos últimos 7 dias, sequência de dias, gráficos e histórico. |
 | Meus treinos | `/workouts` | Lista de treinos, com destaque para o treino do dia da semana. |
-| Inclusão de treino | `/workout/form` | Nome, dia da semana, observações e exercícios (séries, reps, carga). |
-| Edição de treino | `/workout/form?id=...` | Mesma tela, preenchida; também permite excluir. |
+| Inclusão de treino | `/workout/form` | Nome, dia da semana, lembrete opcional, observações e exercícios (séries, reps, carga). |
+| Edição de treino | `/workout/form?id=...` | Mesma tela, preenchida; permite editar o lembrete e excluir. |
 | Visualização de treino | `/workout/[id]` | Detalhes, modo "Iniciar treino" (marcar exercícios) e evolução do treino. |
-| Perfil | `/profile` | Alterar nome, tema (claro / noturno / automático), trocar usuário e apagar dados. |
+| Perfil | `/profile` | Lembrete personalizado por dias, horário e mensagem; nome, tema, trocar usuário e apagar dados. |
+
+Os lembretes são notificações locais recorrentes, funcionam sem internet e pedem permissão na primeira ativação. Estão disponíveis no Android e iOS; o aparelho precisa permitir notificações para exibi-las.
 
 ## Como a evolução é calculada
 
