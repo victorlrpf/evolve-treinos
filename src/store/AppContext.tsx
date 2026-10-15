@@ -7,9 +7,16 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Session, ThemeMode, User, Workout } from '../types';
+import { Session, ThemeMode, TrainingReminder, User, Workout } from '../types';
 
 const STORAGE_KEY = '@evolve/state/v1';
+
+export const DEFAULT_TRAINING_REMINDER: TrainingReminder = {
+  enabled: false,
+  weekdays: [1, 2, 3, 4, 5],
+  time: '18:00',
+  message: 'Hora de cuidar de você. Separe um tempo para treinar hoje!',
+};
 
 interface PersistedState {
   user: User | null;
@@ -17,6 +24,7 @@ interface PersistedState {
   onboarded: boolean;
   themeMode: ThemeMode;
   workouts: Workout[];
+  trainingReminder: TrainingReminder;
   /** mais recentes primeiro */
   sessions: Session[];
 }
@@ -26,6 +34,7 @@ const initialState: PersistedState = {
   onboarded: false,
   themeMode: 'system',
   workouts: [],
+  trainingReminder: DEFAULT_TRAINING_REMINDER,
   sessions: [],
 };
 
@@ -35,6 +44,7 @@ interface AppContextValue extends PersistedState {
   skipSignup: () => void;
   logout: () => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setTrainingReminder: (reminder: TrainingReminder) => void;
   saveWorkout: (workout: Workout) => void;
   deleteWorkout: (id: string) => void;
   addSession: (session: Session) => void;
@@ -82,6 +92,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, themeMode }));
   }, []);
 
+  const setTrainingReminder = useCallback((trainingReminder: TrainingReminder) => {
+    setState((s) => ({ ...s, trainingReminder }));
+  }, []);
+
   const saveWorkout = useCallback((workout: Workout) => {
     setState((s) => {
       const exists = s.workouts.some((w) => w.id === workout.id);
@@ -115,6 +129,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skipSignup,
       logout,
       setThemeMode,
+      setTrainingReminder,
       saveWorkout,
       deleteWorkout,
       addSession,
@@ -127,6 +142,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       skipSignup,
       logout,
       setThemeMode,
+      setTrainingReminder,
       saveWorkout,
       deleteWorkout,
       addSession,

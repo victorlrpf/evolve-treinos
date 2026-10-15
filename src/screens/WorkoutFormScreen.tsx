@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -18,6 +19,7 @@ import { useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
 import { Workout } from '../types';
 import { WEEKDAYS_SHORT, uid } from '../utils/helpers';
+import { syncWorkoutReminder } from '../utils/notifications';
 
 interface FormExercise {
   id: string;
@@ -48,7 +50,11 @@ export default function WorkoutFormScreen() {
 
   const [name, setName] = useState(editing?.name ?? '');
   const [weekday, setWeekday] = useState<number | null>(editing?.weekday ?? null);
+  const [reminderTime, setReminderTime] = useState<string | null>(
+    editing?.reminderTime ?? null,
+  );
   const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [saving, setSaving] = useState(false);
   const [exercises, setExercises] = useState<FormExercise[]>(
     editing
       ? editing.exercises.map((e) => ({
@@ -73,7 +79,7 @@ export default function WorkoutFormScreen() {
     setExercises((list) => (list.length > 1 ? list.filter((e) => e.id !== id) : list));
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       Alert.alert('Nome obrigatório', 'Dê um nome ao treino (ex.: Treino A – Peito e tríceps).');
@@ -84,10 +90,15 @@ export default function WorkoutFormScreen() {
       Alert.alert('Adicione exercícios', 'Inclua pelo menos um exercício com nome.');
       return;
     }
+    if (reminderTime && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(reminderTime)) {
+      Alert.alert('Horário inválido', 'Informe o horário do lembrete no formato HH:MM.');
+      return;
+    }
     const workout: Workout = {
       id: editing?.id ?? uid(),
       name: trimmed,
       weekday,
+      reminderTime,
       notes: notes.trim(),
       exercises: valid.map((e) => ({
         id: e.id,
@@ -99,7 +110,29 @@ export default function WorkoutFormScreen() {
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
     saveWorkout(workout);
-    router.back();
+    setSaving(true);
+    try {
+      const scheduled = await syncWorkoutReminder(workout);
+      router.back();
+      if (reminderTime && !scheduled) {
+        Alert.alert(
+          'Treino salvo',
+          Platform.OS === 'web'
+            ? 'Os lembretes estão disponíveis nos aplicativos Android e iOS.'
+            : 'O sistema não permitiu notificações. Ative-as nas configurações do aparelho para receber o lembrete.',
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Treino salvo, mas lembrete não atualizado',
+        error instanceof Error
+          ? `O treino foi salvo, mas o lembrete não foi configurado: ${error.message}`
+          : 'O treino foi salvo, mas não foi possível configurar o lembrete. Tente novamente.',
+      );
+      router.back();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onDelete = () => {
@@ -109,9 +142,19 @@ export default function WorkoutFormScreen() {
       {
         text: 'Excluir',
         style: 'destructive',
-        onPress: () => {
-          deleteWorkout(editing.id);
-          router.dismissAll();
+        onPress: async () => {
+          try {
+            await syncWorkoutReminder({ ...editing, reminderTime: null });
+            deleteWorkout(editing.id);
+            router.dismissAll();
+          } catch (error) {
+            Alert.alert(
+              'Não foi possível excluir o treino',
+              error instanceof Error
+                ? `O lembrete não pôde ser cancelado: ${error.message}`
+                : 'O lembrete não pôde ser cancelado. Tente novamente.',
+            );
+          }
         },
       },
     ]);
@@ -141,12 +184,51 @@ export default function WorkoutFormScreen() {
         <Text style={[styles.label, { color: colors.textMuted }]}>Dia da semana (opcional)</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Chip label="Livre" selected={weekday === null} onPress={() => setWeekday(null)} />
+            <Chip
+              label="Livre"
+              selected={weekday === null}
+              onPress={() => {
+                setWeekday(null);
+                setReminderTime(null);
+              }}
+            />
             {WEEKDAYS_SHORT.map((d, i) => (
               <Chip key={d} label={d} selected={weekday === i} onPress={() => setWeekday(i)} />
             ))}
           </View>
         </ScrollView>
+
+        <Card style={{ marginBottom: 16 }}>
+          <View style={styles.reminderRow}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+                Lembrete deste treino
+              </Text>
+              <Text style={{ color: colors.textMuted, marginTop: 4, lineHeight: 18 }}>
+                {weekday === null
+                  ? 'Escolha um dia da semana para programar um lembrete.'
+                  : 'Receba uma notificação no dia programado.'}
+              </Text>
+            </View>
+            <Switch
+              value={reminderTime !== null}
+              onValueChange={(enabled) => setReminderTime(enabled ? '18:00' : null)}
+              disabled={weekday === null}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+          {reminderTime !== null ? (
+            <Input
+              label="Horário do lembrete"
+              value={reminderTime}
+              onChangeText={setReminderTime}
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+              placeholder="18:00"
+              containerStyle={{ marginTop: 12, marginBottom: 0 }}
+            />
+          ) : null}
+        </Card>
 
         <Input
           label="Observações (opcional)"
@@ -221,6 +303,7 @@ export default function WorkoutFormScreen() {
             title={editing ? 'Salvar alterações' : 'Salvar treino'}
             icon="checkmark"
             onPress={onSave}
+            disabled={saving}
           />
           {editing ? (
             <Button
@@ -251,5 +334,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

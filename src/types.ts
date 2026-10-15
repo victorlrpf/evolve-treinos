@@ -18,9 +18,17 @@ export interface Workout {
   name: string;
   /** 0 = domingo ... 6 = sábado; null = sem dia fixo */
   weekday: number | null;
+  reminderTime: string | null;
   notes: string;
   exercises: Exercise[];
   createdAt: string;
+}
+
+export interface TrainingReminder {
+  enabled: boolean;
+  weekdays: number[];
+  time: string;
+  message: string;
 }
 
 /** Registro de um treino realizado (alimenta o dashboard) */

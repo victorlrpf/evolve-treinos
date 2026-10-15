@@ -5,6 +5,9 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
+import { configureNotificationPresentation } from '../utils/notifications';
+
+configureNotificationPresentation();
 
 function RootStack() {
   const { ready, onboarded } = useApp();
