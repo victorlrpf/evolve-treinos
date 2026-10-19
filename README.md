@@ -23,7 +23,7 @@ Abra no celular com o app **Expo Go** (QR code) ou pressione `a` (Android) / `i`
 | Visualização de treino | `/workout/[id]` | Detalhes, modo "Iniciar treino" (marcar exercícios) e evolução do treino. |
 | Perfil | `/profile` | Lembrete personalizado por dias, horário e mensagem; nome, tema, trocar usuário e apagar dados. |
 
-Os lembretes são notificações locais recorrentes, funcionam sem internet e pedem permissão na primeira ativação. Estão disponíveis no Android e iOS; o aparelho precisa permitir notificações para exibi-las.
+Os lembretes são notificações locais recorrentes, funcionam sem internet e pedem permissão na primeira ativação. Estão disponíveis no Android e iOS; o aparelho precisa permitir notificações para exibi-las. Se o Expo Go apresentar `ExpoTopicSubscriptionModule` ausente, atualize o Expo Go para uma versão compatível com o SDK do projeto ou teste com um development build.
 
 ## Como a evolução é calculada
 

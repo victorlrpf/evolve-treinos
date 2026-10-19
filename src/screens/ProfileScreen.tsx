@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -11,12 +10,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAppDialog } from '../components/AppDialog';
 import { Button, Card, Chip, IconName, Input, SectionTitle } from '../components/ui';
 import { DEFAULT_TRAINING_REMINDER, useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
 import { ThemeMode } from '../types';
 import { WEEKDAYS_SHORT } from '../utils/helpers';
-import { cancelAllTrainingReminders, syncPersonalTrainingReminder } from '../utils/notifications';
+import {
+  cancelAllTrainingReminders,
+  NotificationsUnavailableError,
+  syncPersonalTrainingReminder,
+} from '../utils/notifications';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: IconName }[] = [
   { mode: 'light', label: 'Claro', icon: 'sunny-outline' },
@@ -35,6 +39,7 @@ export default function ProfileScreen() {
     logout,
     clearAll,
   } = useApp();
+  const { showDialog } = useAppDialog();
   const { colors } = useTheme();
   const [name, setName] = useState(user?.name ?? '');
   const [reminderDraft, setReminderDraft] = useState(trainingReminder);
@@ -43,30 +48,54 @@ export default function ProfileScreen() {
   const saveName = () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      Alert.alert('Nome vazio', 'Digite como você quer ser chamado.');
+      showDialog({
+        title: 'Nome vazio',
+        message: 'Digite como você quer ser chamado.',
+        tone: 'danger',
+      });
       return;
     }
     setUserName(trimmed);
-    Alert.alert('Pronto!', 'Seu nome foi atualizado.');
+    showDialog({
+      title: 'Pronto!',
+      message: 'Seu nome foi atualizado.',
+      tone: 'success',
+    });
   };
 
   const confirmLogout = () =>
-    Alert.alert('Trocar usuário', 'Você voltará à tela inicial. Seus treinos e histórico serão mantidos.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Continuar', onPress: logout },
-    ]);
+    showDialog({
+      title: 'Trocar usuário?',
+      message: 'Você voltará à tela inicial. Seus treinos e histórico serão mantidos.',
+      actions: [
+        { label: 'Cancelar', variant: 'secondary' },
+        { label: 'Continuar', onPress: logout },
+      ],
+    });
 
   const saveReminder = async () => {
     if (reminderDraft.enabled && reminderDraft.weekdays.length === 0) {
-      Alert.alert('Escolha os dias', 'Selecione pelo menos um dia para receber o lembrete.');
+      showDialog({
+        title: 'Escolha os dias',
+        message: 'Selecione pelo menos um dia para receber o lembrete.',
+        tone: 'danger',
+      });
       return;
     }
     if (reminderDraft.enabled && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(reminderDraft.time)) {
-      Alert.alert('Horário inválido', 'Informe o horário no formato HH:MM.');
+      showDialog({
+        title: 'Horário inválido',
+        message: 'Informe o horário no formato HH:MM.',
+        tone: 'danger',
+      });
       return;
     }
     if (reminderDraft.enabled && !reminderDraft.message.trim()) {
-      Alert.alert('Mensagem vazia', 'Escreva uma mensagem para o seu lembrete.');
+      showDialog({
+        title: 'Mensagem vazia',
+        message: 'Escreva uma mensagem para o seu lembrete.',
+        tone: 'danger',
+      });
       return;
     }
 
@@ -77,59 +106,71 @@ export default function ProfileScreen() {
         const disabledReminder = { ...reminderDraft, enabled: false };
         setReminderDraft(disabledReminder);
         setTrainingReminder(disabledReminder);
-        Alert.alert(
-          'Notificações não permitidas',
-          Platform.OS === 'web'
+        showDialog({
+          title: 'Notificações não permitidas',
+          message: Platform.OS === 'web'
             ? 'Os lembretes estão disponíveis nos aplicativos Android e iOS.'
             : 'Ative as notificações do Evolve nas configurações do aparelho e tente novamente.',
-        );
+          tone: 'danger',
+        });
         return;
       }
       setTrainingReminder(reminderDraft);
-      Alert.alert(
-        'Lembrete salvo',
-        reminderDraft.enabled
+      showDialog({
+        title: 'Lembrete salvo',
+        message: reminderDraft.enabled
           ? 'Você receberá uma notificação nos dias e horários escolhidos.'
           : 'O lembrete personalizado foi desativado.',
-      );
+        tone: 'success',
+      });
     } catch (error) {
-      Alert.alert(
-        'Não foi possível salvar',
-        error instanceof Error
-          ? `O lembrete não foi atualizado: ${error.message}`
-          : 'O lembrete não foi atualizado. Verifique as permissões de notificação e tente novamente.',
-      );
+      if (error instanceof NotificationsUnavailableError) {
+        const disabledReminder = { ...reminderDraft, enabled: false };
+        setReminderDraft(disabledReminder);
+        setTrainingReminder(disabledReminder);
+      }
+      showDialog({
+        title: 'Não foi possível salvar',
+        message: error instanceof NotificationsUnavailableError
+          ? error.message
+          : error instanceof Error
+            ? `O lembrete não foi atualizado: ${error.message}`
+            : 'O lembrete não foi atualizado. Verifique as permissões de notificação e tente novamente.',
+        tone: 'danger',
+      });
     } finally {
       setSavingReminder(false);
     }
   };
 
   const confirmClear = () =>
-    Alert.alert(
-      'Apagar todos os dados',
-      'Isso remove treinos, histórico e cadastro deste aparelho. Não dá para desfazer.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
+    showDialog({
+      title: 'Apagar todos os dados?',
+      message: 'Isso remove treinos, histórico e cadastro deste aparelho. Não dá para desfazer.',
+      tone: 'danger',
+      actions: [
+        { label: 'Cancelar', variant: 'secondary' },
         {
-          text: 'Apagar tudo',
-          style: 'destructive',
+          label: 'Apagar tudo',
+          variant: 'danger',
           onPress: async () => {
             try {
               await cancelAllTrainingReminders();
               clearAll();
               setReminderDraft(DEFAULT_TRAINING_REMINDER);
             } catch (error) {
-              Alert.alert(
-                'Não foi possível apagar os dados',
-                error instanceof Error
+              showDialog({
+                title: 'Não foi possível apagar os dados',
+                message: error instanceof Error
                   ? `As notificações não puderam ser canceladas: ${error.message}`
                   : 'As notificações não puderam ser canceladas. Tente novamente.',
-              );
+                tone: 'danger',
+              });
             }
           },
         },
       ],
-    );
+    });
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>

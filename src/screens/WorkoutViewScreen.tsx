@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from '../components/BarChart';
+import { useAppDialog } from '../components/AppDialog';
 import { Button, Card, SectionTitle } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
@@ -17,6 +18,7 @@ import {
 
 export default function WorkoutViewScreen() {
   const { workouts, sessions, addSession } = useApp();
+  const { showDialog } = useAppDialog();
   const { colors } = useTheme();
   const { id: workoutId } = useLocalSearchParams<{ id: string }>();
 
@@ -56,7 +58,11 @@ export default function WorkoutViewScreen() {
   const finish = () => {
     const checked = workout.exercises.filter((e) => done[e.id]);
     if (checked.length === 0) {
-      Alert.alert('Nenhum exercício concluído', 'Marque ao menos um exercício para registrar o treino.');
+      showDialog({
+        title: 'Nenhum exercício concluído',
+        message: 'Marque ao menos um exercício para registrar o treino.',
+        tone: 'danger',
+      });
       return;
     }
     const session: Session = {
@@ -71,10 +77,11 @@ export default function WorkoutViewScreen() {
     };
     addSession(session);
     cancel();
-    Alert.alert(
-      'Treino registrado! 💪',
-      `Volume: ${formatVolume(session.volume)} · ${session.durationMin} min. Veja a evolução no Dashboard.`,
-    );
+    showDialog({
+      title: 'Treino registrado!',
+      message: `Volume: ${formatVolume(session.volume)} · ${session.durationMin} min. Veja a evolução no Dashboard.`,
+      tone: 'success',
+    });
   };
 
   return (

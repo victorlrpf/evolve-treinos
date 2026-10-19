@@ -4,10 +4,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider, useApp } from '../store/AppContext';
+import { AppDialogProvider } from '../components/AppDialog';
 import { useTheme } from '../theme/useTheme';
-import { configureNotificationPresentation } from '../utils/notifications';
-
-configureNotificationPresentation();
 
 function RootStack() {
   const { ready, onboarded } = useApp();
@@ -64,7 +62,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppProvider>
-        <RootStack />
+        <AppDialogProvider>
+          <RootStack />
+        </AppDialogProvider>
       </AppProvider>
     </SafeAreaProvider>
   );

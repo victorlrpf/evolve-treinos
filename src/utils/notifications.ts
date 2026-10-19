@@ -1,12 +1,37 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { TrainingReminder, Workout } from '../types';
 
 const WORKOUT_REMINDER_PREFIX = 'evolve:workout:';
 const PERSONAL_REMINDER_KEY = 'evolve:personal-training-reminder';
 const ANDROID_CHANNEL_ID = 'training-reminders';
 
-export function configureNotificationPresentation(): void {
+type NotificationsModule = typeof import('expo-notifications');
+
+export class NotificationsUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(
+      'O módulo de notificações não está disponível nesta versão do Expo Go. Atualize o Expo Go ou use um development build.',
+      { cause },
+    );
+    this.name = 'NotificationsUnavailableError';
+  }
+}
+
+let notificationsModulePromise: Promise<NotificationsModule> | undefined;
+let presentationConfigured = false;
+
+async function loadNotifications(): Promise<NotificationsModule> {
+  try {
+    notificationsModulePromise ??= import('expo-notifications');
+    return await notificationsModulePromise;
+  } catch (error) {
+    notificationsModulePromise = undefined;
+    throw new NotificationsUnavailableError(error);
+  }
+}
+
+function configureNotificationPresentation(Notifications: NotificationsModule): void {
+  if (presentationConfigured) return;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldPlaySound: true,
@@ -15,6 +40,7 @@ export function configureNotificationPresentation(): void {
       shouldShowList: true,
     }),
   });
+  presentationConfigured = true;
 }
 
 function parseTime(time: string): { hour: number; minute: number } {
@@ -23,7 +49,9 @@ function parseTime(time: string): { hour: number; minute: number } {
   return { hour: Number(match[1]), minute: Number(match[2]) };
 }
 
-async function requestNotificationPermission(): Promise<boolean> {
+async function requestNotificationPermission(
+  Notifications: NotificationsModule,
+): Promise<boolean> {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') return false;
 
   if (Platform.OS === 'android') {
@@ -42,15 +70,30 @@ async function requestNotificationPermission(): Promise<boolean> {
   return requested.status === 'granted';
 }
 
-async function getScheduledWithKey(key: string) {
+async function getScheduledWithKey(
+  Notifications: NotificationsModule,
+  key: string,
+) {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   return scheduled.filter((item) => item.content.data?.evolveReminderKey === key);
 }
 
-async function cancelScheduled(items: Awaited<ReturnType<typeof getScheduledWithKey>>) {
+async function cancelScheduled(
+  Notifications: NotificationsModule,
+  items: Awaited<ReturnType<typeof getScheduledWithKey>>,
+) {
   await Promise.all(
     items.map((item) => Notifications.cancelScheduledNotificationAsync(item.identifier)),
   );
+}
+
+async function cancelRemindersWithKey(key: string): Promise<void> {
+  try {
+    const Notifications = await loadNotifications();
+    await cancelScheduled(Notifications, await getScheduledWithKey(Notifications, key));
+  } catch (error) {
+    if (!(error instanceof NotificationsUnavailableError)) throw error;
+  }
 }
 
 async function replaceWeeklyReminders(
@@ -61,10 +104,12 @@ async function replaceWeeklyReminders(
   time: string,
 ): Promise<boolean> {
   const { hour, minute } = parseTime(time);
-  const existing = await getScheduledWithKey(key);
-  const hasPermission = await requestNotificationPermission();
+  const Notifications = await loadNotifications();
+  configureNotificationPresentation(Notifications);
+  const existing = await getScheduledWithKey(Notifications, key);
+  const hasPermission = await requestNotificationPermission(Notifications);
   if (!hasPermission) {
-    await cancelScheduled(existing);
+    await cancelScheduled(Notifications, existing);
     return false;
   }
 
@@ -97,14 +142,14 @@ async function replaceWeeklyReminders(
     throw error;
   }
 
-  await cancelScheduled(existing);
+  await cancelScheduled(Notifications, existing);
   return true;
 }
 
 export async function syncWorkoutReminder(workout: Workout): Promise<boolean> {
   const key = `${WORKOUT_REMINDER_PREFIX}${workout.id}`;
   if (!workout.reminderTime) {
-    await cancelScheduled(await getScheduledWithKey(key));
+    await cancelRemindersWithKey(key);
     return true;
   }
 
@@ -128,7 +173,7 @@ export async function syncPersonalTrainingReminder(
   reminder: TrainingReminder,
 ): Promise<boolean> {
   if (!reminder.enabled) {
-    await cancelScheduled(await getScheduledWithKey(PERSONAL_REMINDER_KEY));
+    await cancelRemindersWithKey(PERSONAL_REMINDER_KEY);
     return true;
   }
   if (reminder.weekdays.length === 0) {
@@ -153,11 +198,18 @@ export async function syncPersonalTrainingReminder(
 export async function cancelAllTrainingReminders(): Promise<void> {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') return;
 
+  let Notifications: NotificationsModule;
+  try {
+    Notifications = await loadNotifications();
+  } catch (error) {
+    if (error instanceof NotificationsUnavailableError) return;
+    throw error;
+  }
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const reminders = scheduled.filter((item) => {
     const key = item.content.data?.evolveReminderKey;
     return typeof key === 'string' &&
       (key.startsWith(WORKOUT_REMINDER_PREFIX) || key === PERSONAL_REMINDER_KEY);
   });
-  await cancelScheduled(reminders);
+  await cancelScheduled(Notifications, reminders);
 }

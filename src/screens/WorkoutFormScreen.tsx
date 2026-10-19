@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import {
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -14,12 +13,13 @@ import {
 } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAppDialog } from '../components/AppDialog';
 import { Button, Card, Chip, Input, SectionTitle } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
 import { Workout } from '../types';
 import { WEEKDAYS_SHORT, uid } from '../utils/helpers';
-import { syncWorkoutReminder } from '../utils/notifications';
+import { NotificationsUnavailableError, syncWorkoutReminder } from '../utils/notifications';
 
 interface FormExercise {
   id: string;
@@ -42,6 +42,7 @@ const toFloat = (s: string) => Math.max(0, parseFloat(s.replace(',', '.')) || 0)
 
 export default function WorkoutFormScreen() {
   const { workouts, saveWorkout, deleteWorkout } = useApp();
+  const { showDialog } = useAppDialog();
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
 
@@ -82,16 +83,28 @@ export default function WorkoutFormScreen() {
   const onSave = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      Alert.alert('Nome obrigatório', 'Dê um nome ao treino (ex.: Treino A – Peito e tríceps).');
+      showDialog({
+        title: 'Nome obrigatório',
+        message: 'Dê um nome ao treino (ex.: Treino A – Peito e tríceps).',
+        tone: 'danger',
+      });
       return;
     }
     const valid = exercises.filter((e) => e.name.trim());
     if (valid.length === 0) {
-      Alert.alert('Adicione exercícios', 'Inclua pelo menos um exercício com nome.');
+      showDialog({
+        title: 'Adicione exercícios',
+        message: 'Inclua pelo menos um exercício com nome.',
+        tone: 'danger',
+      });
       return;
     }
     if (reminderTime && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(reminderTime)) {
-      Alert.alert('Horário inválido', 'Informe o horário do lembrete no formato HH:MM.');
+      showDialog({
+        title: 'Horário inválido',
+        message: 'Informe o horário do lembrete no formato HH:MM.',
+        tone: 'danger',
+      });
       return;
     }
     const workout: Workout = {
@@ -113,22 +126,32 @@ export default function WorkoutFormScreen() {
     setSaving(true);
     try {
       const scheduled = await syncWorkoutReminder(workout);
-      router.back();
       if (reminderTime && !scheduled) {
-        Alert.alert(
-          'Treino salvo',
-          Platform.OS === 'web'
+        saveWorkout({ ...workout, reminderTime: null });
+        router.back();
+        showDialog({
+          title: 'Treino salvo sem lembrete',
+          message: Platform.OS === 'web'
             ? 'Os lembretes estão disponíveis nos aplicativos Android e iOS.'
-            : 'O sistema não permitiu notificações. Ative-as nas configurações do aparelho para receber o lembrete.',
-        );
+            : 'Ative as notificações do Evolve nas configurações do aparelho para programar um lembrete.',
+          tone: 'info',
+        });
+        return;
       }
+      router.back();
     } catch (error) {
-      Alert.alert(
-        'Treino salvo, mas lembrete não atualizado',
-        error instanceof Error
-          ? `O treino foi salvo, mas o lembrete não foi configurado: ${error.message}`
-          : 'O treino foi salvo, mas não foi possível configurar o lembrete. Tente novamente.',
-      );
+      if (error instanceof NotificationsUnavailableError && reminderTime) {
+        saveWorkout({ ...workout, reminderTime: null });
+      }
+      showDialog({
+        title: 'Treino salvo, mas lembrete não atualizado',
+        message: error instanceof NotificationsUnavailableError
+          ? error.message
+          : error instanceof Error
+            ? `O treino foi salvo, mas o lembrete não foi configurado: ${error.message}`
+            : 'O treino foi salvo, mas não foi possível configurar o lembrete. Tente novamente.',
+        tone: 'danger',
+      });
       router.back();
     } finally {
       setSaving(false);
@@ -137,27 +160,33 @@ export default function WorkoutFormScreen() {
 
   const onDelete = () => {
     if (!editing) return;
-    Alert.alert('Excluir treino', `Deseja excluir "${editing.name}"? O histórico será mantido.`, [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Excluir',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await syncWorkoutReminder({ ...editing, reminderTime: null });
-            deleteWorkout(editing.id);
-            router.dismissAll();
-          } catch (error) {
-            Alert.alert(
-              'Não foi possível excluir o treino',
-              error instanceof Error
-                ? `O lembrete não pôde ser cancelado: ${error.message}`
-                : 'O lembrete não pôde ser cancelado. Tente novamente.',
-            );
-          }
+    showDialog({
+      title: 'Excluir treino?',
+      message: `Deseja excluir "${editing.name}"? O histórico será mantido.`,
+      tone: 'danger',
+      actions: [
+        { label: 'Cancelar', variant: 'secondary' },
+        {
+          label: 'Excluir',
+          variant: 'danger',
+          onPress: async () => {
+            try {
+              await syncWorkoutReminder({ ...editing, reminderTime: null });
+              deleteWorkout(editing.id);
+              router.dismissAll();
+            } catch (error) {
+              showDialog({
+                title: 'Não foi possível excluir o treino',
+                message: error instanceof Error
+                  ? `O lembrete não pôde ser cancelado: ${error.message}`
+                  : 'O lembrete não pôde ser cancelado. Tente novamente.',
+                tone: 'danger',
+              });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   };
 
   return (
