@@ -6,17 +6,19 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session, ThemeMode, TrainingReminder, User, Workout } from '../types';
+import { DEFAULT_TRAINING_REMINDER } from './localDefaults';
+import {
+  clearLocalData,
+  deleteLocalWorkout,
+  loadLocalAppData,
+  saveLocalSession,
+  saveLocalSettings,
+  saveLocalWorkout,
+  type LocalAppData,
+} from './localDatabase';
 
-const STORAGE_KEY = '@evolve/state/v1';
-
-export const DEFAULT_TRAINING_REMINDER: TrainingReminder = {
-  enabled: false,
-  weekdays: [1, 2, 3, 4, 5],
-  time: '18:00',
-  message: 'Hora de cuidar de você. Separe um tempo para treinar hoje!',
-};
+export { DEFAULT_TRAINING_REMINDER } from './localDefaults';
 
 interface PersistedState {
   user: User | null;
@@ -38,17 +40,35 @@ const initialState: PersistedState = {
   sessions: [],
 };
 
+async function readPersistedState(): Promise<{
+  data: LocalAppData | null;
+  error: string | null;
+}> {
+  try {
+    return { data: await loadLocalAppData(), error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error
+        ? error.message
+        : 'Não foi possível abrir o banco de dados local.',
+    };
+  }
+}
+
 interface AppContextValue extends PersistedState {
   ready: boolean;
-  setUserName: (name: string) => void;
-  skipSignup: () => void;
-  logout: () => void;
-  setThemeMode: (mode: ThemeMode) => void;
-  setTrainingReminder: (reminder: TrainingReminder) => void;
-  saveWorkout: (workout: Workout) => void;
-  deleteWorkout: (id: string) => void;
-  addSession: (session: Session) => void;
-  clearAll: () => void;
+  initializationError: string | null;
+  retryInitialization: () => Promise<void>;
+  setUserName: (name: string) => Promise<void>;
+  skipSignup: () => Promise<void>;
+  logout: () => Promise<void>;
+  setThemeMode: (mode: ThemeMode) => Promise<void>;
+  setTrainingReminder: (reminder: TrainingReminder) => Promise<void>;
+  saveWorkout: (workout: Workout) => Promise<void>;
+  deleteWorkout: (id: string) => Promise<void>;
+  addSession: (session: Session) => Promise<void>;
+  clearAll: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -56,47 +76,58 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [ready, setReady] = useState(false);
+  const [initializationError, setInitializationError] = useState<string | null>(null);
 
-  // Carrega os dados salvos no aparelho
   useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setState({ ...initialState, ...JSON.parse(raw) });
-      } catch {
-        // dados corrompidos: começa do zero
-      }
+    let active = true;
+    void readPersistedState().then(({ data, error }) => {
+      if (!active) return;
+      if (data) setState({ ...initialState, ...data });
+      setInitializationError(error);
       setReady(true);
-    })();
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Salva a cada alteração
-  useEffect(() => {
-    if (!ready) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [state, ready]);
-
-  const setUserName = useCallback((name: string) => {
-    setState((s) => ({ ...s, user: { name }, onboarded: true }));
+  const retryInitialization = useCallback(async () => {
+    setReady(false);
+    setInitializationError(null);
+    const { data, error } = await readPersistedState();
+    if (data) setState({ ...initialState, ...data });
+    setInitializationError(error);
+    setReady(true);
   }, []);
 
-  const skipSignup = useCallback(() => {
+  const setUserName = useCallback(async (name: string) => {
+    const user = { name };
+    await saveLocalSettings({ user, onboarded: true });
+    setState((s) => ({ ...s, user, onboarded: true }));
+  }, []);
+
+  const skipSignup = useCallback(async () => {
+    await saveLocalSettings({ onboarded: true });
     setState((s) => ({ ...s, onboarded: true }));
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await saveLocalSettings({ user: null, onboarded: false });
     setState((s) => ({ ...s, user: null, onboarded: false }));
   }, []);
 
-  const setThemeMode = useCallback((themeMode: ThemeMode) => {
+  const setThemeMode = useCallback(async (themeMode: ThemeMode) => {
+    await saveLocalSettings({ themeMode });
     setState((s) => ({ ...s, themeMode }));
   }, []);
 
-  const setTrainingReminder = useCallback((trainingReminder: TrainingReminder) => {
+  const setTrainingReminder = useCallback(async (trainingReminder: TrainingReminder) => {
+    await saveLocalSettings({ trainingReminder });
     setState((s) => ({ ...s, trainingReminder }));
   }, []);
 
-  const saveWorkout = useCallback((workout: Workout) => {
+  const saveWorkout = useCallback(async (workout: Workout) => {
+    await saveLocalWorkout(workout);
     setState((s) => {
       const exists = s.workouts.some((w) => w.id === workout.id);
       return {
@@ -108,23 +139,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const deleteWorkout = useCallback((id: string) => {
-    // O histórico (sessions) é mantido para não perder a evolução
+  const deleteWorkout = useCallback(async (id: string) => {
+    await deleteLocalWorkout(id);
     setState((s) => ({ ...s, workouts: s.workouts.filter((w) => w.id !== id) }));
   }, []);
 
-  const addSession = useCallback((session: Session) => {
+  const addSession = useCallback(async (session: Session) => {
+    await saveLocalSession(session);
     setState((s) => ({ ...s, sessions: [session, ...s.sessions] }));
   }, []);
 
-  const clearAll = useCallback(() => {
+  const clearAll = useCallback(async () => {
+    await clearLocalData(state.themeMode);
     setState((s) => ({ ...initialState, themeMode: s.themeMode }));
-  }, []);
+  }, [state.themeMode]);
 
   const value = useMemo<AppContextValue>(
     () => ({
       ...state,
       ready,
+      initializationError,
+      retryInitialization,
       setUserName,
       skipSignup,
       logout,
@@ -138,6 +173,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       state,
       ready,
+      initializationError,
+      retryInitialization,
       setUserName,
       skipSignup,
       logout,
