@@ -1,14 +1,15 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Button } from '../components/ui';
 import { AppProvider, useApp } from '../store/AppContext';
 import { AppDialogProvider } from '../components/AppDialog';
 import { useTheme } from '../theme/useTheme';
 
 function RootStack() {
-  const { ready, onboarded } = useApp();
+  const { ready, onboarded, initializationError, retryInitialization } = useApp();
   const { isDark, colors } = useTheme();
 
   if (!ready) {
@@ -22,6 +23,28 @@ function RootStack() {
         }}
       >
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (initializationError) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          backgroundColor: colors.background,
+        }}
+      >
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>
+          Não foi possível carregar seus dados
+        </Text>
+        <Text style={{ color: colors.textMuted, marginVertical: 12, textAlign: 'center' }}>
+          {initializationError}
+        </Text>
+        <Button title="Tentar novamente" onPress={() => void retryInitialization()} />
       </View>
     );
   }
