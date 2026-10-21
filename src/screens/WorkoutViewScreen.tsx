@@ -24,6 +24,7 @@ export default function WorkoutViewScreen() {
 
   const workout = workouts.find((w) => w.id === workoutId);
   const [running, setRunning] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [done, setDone] = useState<Record<string, boolean>>({});
 
@@ -55,7 +56,7 @@ export default function WorkoutViewScreen() {
     setDone({});
   };
 
-  const finish = () => {
+  const finish = async (finishedAt: number) => {
     const checked = workout.exercises.filter((e) => done[e.id]);
     if (checked.length === 0) {
       showDialog({
@@ -73,15 +74,28 @@ export default function WorkoutViewScreen() {
       volume: workoutVolume(checked),
       setsDone: checked.reduce((acc, e) => acc + e.sets, 0),
       exercisesDone: checked.length,
-      durationMin: Math.max(1, Math.round((Date.now() - (startedAt ?? Date.now())) / 60000)),
+      durationMin: Math.max(1, Math.round((finishedAt - (startedAt ?? finishedAt)) / 60000)),
     };
-    addSession(session);
-    cancel();
-    showDialog({
-      title: 'Treino registrado!',
-      message: `Volume: ${formatVolume(session.volume)} · ${session.durationMin} min. Veja a evolução no Dashboard.`,
-      tone: 'success',
-    });
+    setFinishing(true);
+    try {
+      await addSession(session);
+      cancel();
+      showDialog({
+        title: 'Treino registrado!',
+        message: `Volume: ${formatVolume(session.volume)} · ${session.durationMin} min. Veja a evolução no Dashboard.`,
+        tone: 'success',
+      });
+    } catch (error) {
+      showDialog({
+        title: 'Não foi possível registrar o treino',
+        message: error instanceof Error
+          ? `A sessão não foi gravada no aparelho: ${error.message}`
+          : 'A sessão não foi gravada no aparelho. Tente novamente.',
+        tone: 'danger',
+      });
+    } finally {
+      setFinishing(false);
+    }
   };
 
   return (
@@ -190,7 +204,12 @@ export default function WorkoutViewScreen() {
       <View style={{ marginTop: 16, gap: 10 }}>
         {running ? (
           <>
-            <Button title="Finalizar treino" icon="checkmark-done" onPress={finish} />
+            <Button
+              title="Finalizar treino"
+              icon="checkmark-done"
+              onPress={() => void finish(Date.now())}
+              disabled={finishing}
+            />
             <Button title="Cancelar" variant="ghost" onPress={cancel} />
           </>
         ) : (

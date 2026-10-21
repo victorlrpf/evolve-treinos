@@ -1,15 +1,39 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAppDialog } from '../components/AppDialog';
 import { Button, Input } from '../components/ui';
 import { useApp } from '../store/AppContext';
 import { useTheme } from '../theme/useTheme';
 
 export default function WelcomeScreen() {
   const { setUserName, skipSignup } = useApp();
+  const { showDialog } = useAppDialog();
   const { colors } = useTheme();
   const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
   const canStart = name.trim().length > 0;
+
+  const start = async (userName?: string) => {
+    setSaving(true);
+    try {
+      if (userName) {
+        await setUserName(userName);
+      } else {
+        await skipSignup();
+      }
+    } catch (error) {
+      showDialog({
+        title: 'Não foi possível salvar',
+        message: error instanceof Error
+          ? `Seus dados não foram gravados: ${error.message}`
+          : 'Seus dados não foram gravados. Tente novamente.',
+        tone: 'danger',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -41,19 +65,20 @@ export default function WelcomeScreen() {
             placeholder="Ex.: Victão"
             autoCapitalize="words"
             returnKeyType="done"
-            onSubmitEditing={() => canStart && setUserName(name.trim())}
+            onSubmitEditing={() => canStart && void start(name.trim())}
           />
 
           <Button
             title="Começar"
             icon="arrow-forward"
-            disabled={!canStart}
-            onPress={() => setUserName(name.trim())}
+            disabled={!canStart || saving}
+            onPress={() => void start(name.trim())}
           />
           <Button
             title="Pular por agora"
             variant="ghost"
-            onPress={skipSignup}
+            disabled={saving}
+            onPress={() => void start()}
             style={{ marginTop: 8 }}
           />
         </View>

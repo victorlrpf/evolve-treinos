@@ -45,7 +45,7 @@ export default function ProfileScreen() {
   const [reminderDraft, setReminderDraft] = useState(trainingReminder);
   const [savingReminder, setSavingReminder] = useState(false);
 
-  const saveName = () => {
+  const saveName = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       showDialog({
@@ -55,12 +55,22 @@ export default function ProfileScreen() {
       });
       return;
     }
-    setUserName(trimmed);
-    showDialog({
-      title: 'Pronto!',
-      message: 'Seu nome foi atualizado.',
-      tone: 'success',
-    });
+    try {
+      await setUserName(trimmed);
+      showDialog({
+        title: 'Pronto!',
+        message: 'Seu nome foi atualizado.',
+        tone: 'success',
+      });
+    } catch (error) {
+      showDialog({
+        title: 'Não foi possível salvar',
+        message: error instanceof Error
+          ? `Seu nome não foi gravado: ${error.message}`
+          : 'Seu nome não foi gravado. Tente novamente.',
+        tone: 'danger',
+      });
+    }
   };
 
   const confirmLogout = () =>
@@ -69,7 +79,22 @@ export default function ProfileScreen() {
       message: 'Você voltará à tela inicial. Seus treinos e histórico serão mantidos.',
       actions: [
         { label: 'Cancelar', variant: 'secondary' },
-        { label: 'Continuar', onPress: logout },
+        {
+          label: 'Continuar',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              showDialog({
+                title: 'Não foi possível trocar de usuário',
+                message: error instanceof Error
+                  ? `A alteração não foi gravada: ${error.message}`
+                  : 'A alteração não foi gravada. Tente novamente.',
+                tone: 'danger',
+              });
+            }
+          },
+        },
       ],
     });
 
@@ -105,7 +130,7 @@ export default function ProfileScreen() {
       if (reminderDraft.enabled && !scheduled) {
         const disabledReminder = { ...reminderDraft, enabled: false };
         setReminderDraft(disabledReminder);
-        setTrainingReminder(disabledReminder);
+        await setTrainingReminder(disabledReminder);
         showDialog({
           title: 'Notificações não permitidas',
           message: Platform.OS === 'web'
@@ -115,7 +140,7 @@ export default function ProfileScreen() {
         });
         return;
       }
-      setTrainingReminder(reminderDraft);
+      await setTrainingReminder(reminderDraft);
       showDialog({
         title: 'Lembrete salvo',
         message: reminderDraft.enabled
@@ -127,7 +152,18 @@ export default function ProfileScreen() {
       if (error instanceof NotificationsUnavailableError) {
         const disabledReminder = { ...reminderDraft, enabled: false };
         setReminderDraft(disabledReminder);
-        setTrainingReminder(disabledReminder);
+        try {
+          await setTrainingReminder(disabledReminder);
+        } catch (saveError) {
+          showDialog({
+            title: 'Não foi possível salvar o lembrete',
+            message: saveError instanceof Error
+              ? `A preferência não foi gravada: ${saveError.message}`
+              : 'A preferência não foi gravada. Tente novamente.',
+            tone: 'danger',
+          });
+          return;
+        }
       }
       showDialog({
         title: 'Não foi possível salvar',
@@ -156,14 +192,25 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               await cancelAllTrainingReminders();
-              clearAll();
+            } catch (error) {
+              showDialog({
+                title: 'Não foi possível cancelar os lembretes',
+                message: error instanceof Error
+                  ? `As notificações não puderam ser canceladas: ${error.message}`
+                  : 'As notificações não puderam ser canceladas. Tente novamente.',
+                tone: 'danger',
+              });
+              return;
+            }
+            try {
+              await clearAll();
               setReminderDraft(DEFAULT_TRAINING_REMINDER);
             } catch (error) {
               showDialog({
                 title: 'Não foi possível apagar os dados',
                 message: error instanceof Error
-                  ? `As notificações não puderam ser canceladas: ${error.message}`
-                  : 'As notificações não puderam ser canceladas. Tente novamente.',
+                  ? `Os dados continuam salvos no aparelho: ${error.message}`
+                  : 'Os dados continuam salvos no aparelho. Tente novamente.',
                 tone: 'danger',
               });
             }
@@ -171,6 +218,20 @@ export default function ProfileScreen() {
         },
       ],
     });
+
+  const changeTheme = async (mode: ThemeMode) => {
+    try {
+      await setThemeMode(mode);
+    } catch (error) {
+      showDialog({
+        title: 'Não foi possível salvar o tema',
+        message: error instanceof Error
+          ? `A preferência não foi gravada: ${error.message}`
+          : 'A preferência não foi gravada. Tente novamente.',
+        tone: 'danger',
+      });
+    }
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
@@ -273,7 +334,7 @@ export default function ProfileScreen() {
             return (
               <Pressable
                 key={opt.mode}
-                onPress={() => setThemeMode(opt.mode)}
+                onPress={() => void changeTheme(opt.mode)}
                 style={[
                   styles.themeOption,
                   {

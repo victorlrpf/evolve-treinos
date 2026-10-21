@@ -122,12 +122,25 @@ export default function WorkoutFormScreen() {
       })),
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
-    saveWorkout(workout);
     setSaving(true);
+    try {
+      await saveWorkout(workout);
+    } catch (error) {
+      setSaving(false);
+      showDialog({
+        title: 'Não foi possível salvar o treino',
+        message: error instanceof Error
+          ? `O treino não foi gravado no aparelho: ${error.message}`
+          : 'O treino não foi gravado no aparelho. Tente novamente.',
+        tone: 'danger',
+      });
+      return;
+    }
+
     try {
       const scheduled = await syncWorkoutReminder(workout);
       if (reminderTime && !scheduled) {
-        saveWorkout({ ...workout, reminderTime: null });
+        await saveWorkout({ ...workout, reminderTime: null });
         router.back();
         showDialog({
           title: 'Treino salvo sem lembrete',
@@ -141,7 +154,19 @@ export default function WorkoutFormScreen() {
       router.back();
     } catch (error) {
       if (error instanceof NotificationsUnavailableError && reminderTime) {
-        saveWorkout({ ...workout, reminderTime: null });
+        try {
+          await saveWorkout({ ...workout, reminderTime: null });
+        } catch (saveError) {
+          showDialog({
+            title: 'Não foi possível atualizar o lembrete',
+            message: saveError instanceof Error
+              ? `O treino está salvo, mas a preferência do lembrete não foi atualizada: ${saveError.message}`
+              : 'O treino está salvo, mas a preferência do lembrete não foi atualizada.',
+            tone: 'danger',
+          });
+          router.back();
+          return;
+        }
       }
       showDialog({
         title: 'Treino salvo, mas lembrete não atualizado',
@@ -172,14 +197,25 @@ export default function WorkoutFormScreen() {
           onPress: async () => {
             try {
               await syncWorkoutReminder({ ...editing, reminderTime: null });
-              deleteWorkout(editing.id);
+            } catch (error) {
+              showDialog({
+                title: 'Não foi possível cancelar o lembrete',
+                message: error instanceof Error
+                  ? `O lembrete não pôde ser cancelado: ${error.message}`
+                  : 'O lembrete não pôde ser cancelado. Tente novamente.',
+                tone: 'danger',
+              });
+              return;
+            }
+            try {
+              await deleteWorkout(editing.id);
               router.dismissAll();
             } catch (error) {
               showDialog({
                 title: 'Não foi possível excluir o treino',
                 message: error instanceof Error
-                  ? `O lembrete não pôde ser cancelado: ${error.message}`
-                  : 'O lembrete não pôde ser cancelado. Tente novamente.',
+                  ? `O treino continua salvo: ${error.message}`
+                  : 'O treino continua salvo. Tente novamente.',
                 tone: 'danger',
               });
             }
