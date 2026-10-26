@@ -1,6 +1,6 @@
 # Evolve Treinos
 
-App em React Native (Expo + TypeScript) para criar treinos e acompanhar a evolução com relatórios e dashboard. Funciona 100% offline: tudo é salvo no próprio aparelho (AsyncStorage), sem servidor.
+App em React Native (Expo + TypeScript) para criar treinos e acompanhar a evolução com relatórios e dashboard. Funciona offline: treinos, exercícios, histórico e preferências são persistidos localmente em SQLite, sem servidor.
 
 ## Como rodar
 
@@ -10,6 +10,8 @@ npx expo start
 ```
 
 Abra no celular com o app **Expo Go** (QR code) ou pressione `a` (Android) / `i` (iOS) para usar um emulador.
+
+Os dados ficam no banco SQLite local. Na primeira abertura após esta atualização, os dados existentes em AsyncStorage são importados automaticamente e removidos do armazenamento antigo após a importação bem-sucedida. A sincronização com Supabase ainda não faz parte desta etapa.
 
 ## Telas
 
@@ -36,7 +38,7 @@ src/
   app/          rotas (Expo Router): _layout, welcome, (tabs), workout
   screens/      conteúdo de cada tela
   components/   Card, Button, Input, Chip, BarChart...
-  store/        estado global + persistência local
+  store/        estado global, repositórios e banco SQLite local
   theme/        paleta roxa (clara e escura) e hook useTheme
   utils/        datas, volume, estatísticas do dashboard
 ```
@@ -47,6 +49,7 @@ A cor principal é roxa (`src/theme/colors.ts`). O modo noturno é escolhido no 
 
 ## Ideias para evoluir
 
+- Sincronização autenticada com Supabase e migração de dados de visitante
 - Exportar / importar backup dos dados em JSON
 - Cronômetro de descanso entre séries
 - Gráfico de carga por exercício ao longo do tempo
